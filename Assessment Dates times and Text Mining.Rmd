@@ -1,0 +1,234 @@
+---
+title: "Assessment Part 1: Dates, Times, and Text Mining"
+output: html_notebook
+---
+
+
+
+```{r}
+library(dslabs)
+library(lubridate)
+library(dplyr)
+library(pdftools)
+options(digits = 3)  
+data(brexit_polls)
+sum(month(brexit_polls$startdate)==4)
+
+sum(round_date(brexit_polls$enddate, unit = "week") == "2016-06-12")
+```
+
+Question: Use the weekdays() function from lubridate to determine the weekday on which each poll ended (enddate).
+
+On which weekday did the greatest number of polls end?
+```{r}
+table(weekdays(brexit_polls$enddate))
+```
+
+This data frame contains a set of about 100,000 movie reviews. The timestamp column contains the review date as the number of seconds since 1970-01-01 (epoch time).
+Convert the timestamp column to dates using the lubridate as_datetime() function.
+
+Which year had the most movie reviews?
+```{r}
+data(movielens)
+movielens %>%
+   mutate(timestamp1 = as_datetime(timestamp),
+          year = year(timestamp1)) %>%
+   group_by(year) %>%
+   summarise(n = n()) %>%
+   arrange(desc(n))
+```
+Which hour of the day had the most movie reviews?
+```{r}
+movielens %>%
+   mutate(timestamp1 = as_datetime(timestamp),
+          hour = hour(timestamp1)) %>%
+   group_by(hour) %>%
+   summarise(n = n()) %>%
+   arrange(desc(n))
+
+
+```
+Project Gutenberg is a digital archive of public domain books. The R package gutenbergr facilitates the importation of these texts into R. We will combine this with the tidyverse and tidytext libraries to practice text mining.
+
+Use these libraries and options:
+Use str_detect() to find the ID of the novel Pride and Prejudice.
+
+How many different ID numbers are returned?
+
+```{r}
+library(tidyverse)
+library(gutenbergr)
+library(tidytext)
+options(digits = 3)
+gutenberg_metadata %>% filter(str_detect(title,'Pride and Prejudice')) %>%
+  summarise(n = n_distinct(gutenberg_id))
+
+#Notice that there are several versions of the book. The gutenberg_works() function filters this table to remove replicates and include only English language works. Use this function to find the ID for Pride and Prejudice.
+
+
+gutenberg_works(title=="Pride and Prejudice")
+
+book <- gutenberg_download(gutenberg_works(title=="Pride and Prejudice"),mirror="http://gutenberg.readingroo.ms/")
+book_words <- book %>%
+  unnest_tokens(word, text) 
+  
+nrow(book_words)
+
+#omitting stop words
+book_words_without_stop_words <- book %>%
+  unnest_tokens(word, text) %>%
+  filter(!word %in% stop_words$word)
+nrow(book_words_without_stop_words)
+
+book_words <- book_words %>% anti_join(stop_words)
+nrow(book_words)
+
+#After removing stop words, detect and then filter out any token that contains a digit from words.
+book_words <- book_words %>%
+     filter(!str_detect(word, "\\d"))
+ nrow(book_words)
+```
+Analyze the most frequent words in the novel after removing stop words and tokens with digits.
+
+How many words appear more than 100 times in the book?
+
+```{r}
+ book_words %>% count(word) %>% filter(n>= 100) %>% arrange(desc(n))
+```
+
+Use this afinn lexicon to assign sentiment values to words. Keep only words that are present in both words and the afinn lexicon. Save this data frame as afinn_sentiments.
+
+How many elements of words have sentiments in the afinn lexicon?
+
+What proportion of words in afinn_sentiments have a positive value?
+
+How many elements of afinn_sentiments have a value of 4?
+
+```{r}
+afinn_sentiments <- inner_join(afinn, book_words)
+nrow(afinn_sentiments)
+
+mean(afinn_sentiments$value > 0)
+
+sum(afinn_sentiments$value==4)
+```
+
+<h3>Puerto Rico Hurricane Mortality:</h3>
+
+In the extdata directory of the dslabs package, you will find a PDF file containing daily mortality data for Puerto Rico from Jan 1, 2015 to May 31, 2018. You can find the file like this:
+```{r}
+fn <- system.file("extdata", "RD-Mortality-Report_2015-18-180531.pdf", package="dslabs")
+system2("open", args = fn)
+txt <- pdf_text(fn)
+```
+Extract the ninth page of the PDF file from the object txt, then use the str_split() function from the stringr package so that you have each line in a different entry. The new line character is \n. Call this string vector x.
+
+Define s to be the first entry of the x object.
+
+What kind of object is s?
+
+```{r}
+txt[9]
+x <- str_split(txt[9], "\n")
+class(x)
+
+s <- x[[1]]
+class(s)
+s <- str_trim(s)
+s[1]
+```
+
+We want to extract the numbers from the strings stored in s. However, there are a lot of non-numeric characters that will get in the way. We can remove these, but before doing this we want to preserve the string with the column header, which includes the month abbreviation.
+
+Use the str_which() function to find the row with the header. Save this result to header_index. Hint: find the first string that matches the pattern "2015" using the str_which() function.
+
+What is the value of header_index?
+```{r}
+header_index <- str_which(s, "2015")[1]
+header_index
+
+```
+We want to extract two objects from the header row: month will store the month and header will store the column names.
+
+Save the content of the header row into an object called header, then use str_split() to help define the two objects we need.
+
+What is the value of month?
+```{r}
+tmp <- str_split(s[header_index], "\\s+", simplify = TRUE)
+month <- tmp[1]
+header <- tmp[-1]
+month
+```
+
+Notice that towards the end of the page defined by s you see a "Total" row followed by rows with other summary statistics. Create an object called tail_index with the index of the "Total" entry.
+
+What is the value of tail_index?
+```{r}
+tail_index  <- str_which(s, "Total")
+tail_index
+```
+
+Because our PDF page includes graphs with numbers, some of our rows have just one number (from the y-axis of the plot). Use the str_count() function to create an object n with the count of numbers in each row.
+
+How many rows have a single number in them?
+```{r}
+n <- str_count(s,pattern="\\d+")
+sum(n==1)
+
+```
+
+We are now ready to remove entries from rows that we know we don't need. The entry header_index and everything before it should be removed. Entries for which n is 1 should also be removed, and the entry tail_index and everything that comes after it should be removed as well.
+
+How many entries remain in s?
+```{r}
+out <- c(1:header_index, which(n==1), tail_index:length(s))
+s <- s[-out]
+length(s)
+
+```
+Now we are ready to remove all text that is not a digit or space. Do this using regular expressions (regex) and the str_remove_all() function.
+
+In regex, using the ^ inside the square brackets [] means not, like the ! means not in !=. To define the regex pattern to catch all non-numbers, you can type [^\\d]. But remember you also want to keep spaces.
+
+Which of these commands produces the correct output?
+```{r}
+
+s <- str_remove_all(s, "[^\\d\\s]")
+```
+
+Use the str_split_fixed function to convert s into a data matrix with just the day and death count data:
+
+    
+s <- str_split_fixed(s, "\\s+", n = 6)[,1:5]
+
+  
+Now you are almost ready to finish. Add column names to the matrix: the first column should be day and the next columns should be the header. Convert all values to numeric. Also, add a column with the month. Call the resulting object tab.
+
+What was the mean number of deaths per day in September 2015?
+What is the mean number of deaths per day in September 2016?
+
+Hurricane María hit Puerto Rico on September 20, 2017. What was the mean number of deaths per day from September 1-19, 2017, before the hurricane hit?
+
+What was the mean number of deaths per day from September 20-30, 2017, after the hurricane hit?
+
+
+```{r}
+s <- str_split_fixed(s, "\\s+", n = 6)[,1:5]
+tab <- s %>% 
+    as_tibble() %>% 
+    setNames(c("day", header)) %>%
+    mutate_all(as.numeric)
+mean(tab$"2015")
+
+mean(tab$"2016")
+mean(tab$"2017"[1:19])
+mean(tab$"2017"[20:30])
+```
+Finish it up by changing tab to a tidy format, starting from this code outline:
+
+```{r}
+
+tab <- tab %>% gather(year, deaths, -day) %>%
+    mutate(deaths = as.numeric(deaths))
+```
+
