@@ -230,5 +230,14 @@ Finish it up by changing tab to a tidy format, starting from this code outline:
 
 tab <- tab %>% gather(year, deaths, -day) %>%
     mutate(deaths = as.numeric(deaths))
+tab
+```
+
+```{r}
+ tab %>% filter(year < 2018) %>% 
+        ggplot(aes(day, deaths, color = year)) +
+        geom_line() +
+        geom_vline(xintercept = 20) +
+        geom_point()
 ```
 
