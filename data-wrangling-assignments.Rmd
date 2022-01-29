@@ -157,4 +157,113 @@ str_subset(problems, pattern_with_groups) %>%
   str_replace(pattern_with_groups, "\\1'\\2") %>% head
 
 ```
+```{r}
+# read raw murders data line by line
+filename <- system.file("extdata/murders.csv", package = "dslabs")
+lines <- readLines(filename)
+lines %>% head()
+
+# split at commas with str_split function, remove row of column names
+x <- str_split(lines, ",") 
+x %>% head()
+col_names <- x[[1]]
+x <- x[-1]
+
+# extract first element of each list entry
+library(purrr)
+map(x, function(y) y[1]) %>% head()
+map(x, 1) %>% head()
+
+# extract columns 1-5 as characters, then convert to proper format - NOTE: DIFFERENT FROM VIDEO
+dat <- data.frame(parse_guess(map_chr(x, 1)),
+                  parse_guess(map_chr(x, 2)),
+                  parse_guess(map_chr(x, 3)),
+                  parse_guess(map_chr(x, 4)),
+                  parse_guess(map_chr(x, 5))) %>%
+  setNames(col_names)
+  
+dat %>% head
+  
+# more efficient code for the same thing
+dat <- x %>%
+  transpose() %>%
+  map( ~ parse_guess(unlist(.))) %>%
+  setNames(col_names) %>% 
+  as.data.frame() 
+
+# the simplify argument makes str_split return a matrix instead of a list
+x <- str_split(lines, ",", simplify = TRUE) 
+col_names <- x[1,]
+x <- x[-1,]
+x %>% as_tibble() %>%
+  setNames(col_names) %>%
+  mutate_all(parse_guess)
+```
+
+Case Study: Extracting a Table from a PDF
+The data come from a paper External link published in the prestigious journal PNAS. However, the data are not provided in a spreadsheet; they are in a table in a PDF document. We could extract the numbers by hand, but this could lead to human error. Instead we can try to wrangle the data using R.
+
+```{r}
+library(dslabs)
+data("research_funding_rates")
+research_funding_rates 
+
+```
+Downloading the data
+We start by downloading the PDF document then importing it into R using the following code:
+```{r}
+library("pdftools")
+temp_file <- tempfile()
+url <- "http://www.pnas.org/content/suppl/2015/09/16/1510159112.DCSupplemental/pnas.201510159SI.pdf"
+download.file(url, temp_file)
+txt <- pdf_text(temp_file)
+file.remove(temp_file)
+
+raw_data_research_funding_rates <- txt[2]
+
+tab <- str_split(raw_data_research_funding_rates, "\n")
+tab <- tab[[1]]
+the_names_1 <- tab[3]
+the_names_2 <- tab[5]
+the_names_1 <- the_names_1 %>%
+  str_trim() %>%
+  str_replace_all(",\\s.", "") %>%
+  str_split("\\s{2,}", simplify = TRUE)
+the_names_1
+
+ 
+the_names_2 <-the_names_2 %>%
+    str_trim() %>%
+    str_split("\\s+", simplify = TRUE)
+
+tmp_names <- str_c(rep(the_names_1, each = 3), the_names_2[-1], sep = "_")
+ the_names <- c(the_names_2[1], tmp_names) %>%
+     str_to_lower() %>%
+     str_replace_all("\\s", "_")
+ the_names
+ 
+ new_research_funding_rates <- tab[7:16] %>%
+     str_trim %>%
+     str_split("\\s{2,}", simplify = TRUE) %>%
+     data.frame(stringsAsFactors = FALSE) %>%
+     setNames(the_names) %>%
+     mutate_at(-1, parse_number)
+ new_research_funding_rates %>% head()
+```
+
+```{r}
+library(rvest)
+library(tidyverse)
+library(stringr)
+url <- "https://en.wikipedia.org/w/index.php?title=Opinion_polling_for_the_United_Kingdom_European_Union_membership_referendum&oldid=896735054"
+tab <- read_html(url) %>% html_nodes("table")
+polls <- tab[[6]] %>% html_table(fill = TRUE)
+polls <- polls[-1,]
+names(polls) <- c("dates", "remain", "leave", "undecided", "lead", "samplesize", "pollster", "poll_type", "notes")
+length(which(grepl("%", polls$remain)))
+
+#converts the remain vector to a proportion between 0 and 1 from percent?
+parse_number(polls$remain)/100
+as.numeric(str_replace(polls$remain, "%", ""))/100
+```
 
