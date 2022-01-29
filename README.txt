@@ -1,1 +1,1 @@
-We analyse gun murder data collected by FBI
+Datascience course using R 
